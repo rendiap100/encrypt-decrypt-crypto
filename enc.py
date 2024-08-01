@@ -7,7 +7,7 @@ from colorama import Fore, Style, init
 
 def encrypt_file(password, plain_file_path, encrypted_file_path):
     # Derive key from password
-    salt = b'salt123'  # You should use a unique salt
+    salt = os.urandom(16)  # Use a unique salt
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
@@ -18,10 +18,10 @@ def encrypt_file(password, plain_file_path, encrypted_file_path):
     key = kdf.derive(password.encode())
 
     # Generate Initialization Vector
-    iv = b'iv12345678901234'
+    cari_apa_bang = os.urandom(16)
 
     # Create a cipher object and encrypt the data
-    cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
+    cipher = Cipher(algorithms.AES(key), modes.CFB(cari_apa_bang), backend=default_backend())
     encryptor = cipher.encryptor()
     
     # Read the plaintext file
@@ -31,14 +31,20 @@ def encrypt_file(password, plain_file_path, encrypted_file_path):
     # Encrypt the data
     ciphertext = encryptor.update(plaintext) + encryptor.finalize()
 
-    # Write the encrypted data to a new file
+    # Write the salt, Initialization Vector, and encrypted data to a new file
     with open(encrypted_file_path, 'wb') as file:
-        file.write(iv)
+        file.write(salt)
+        file.write(cari_apa_bang)
         file.write(ciphertext)
 
 def decrypt_file(password, encrypted_file_path, decrypted_file_path):
+    # Read the encrypted file
+    with open(encrypted_file_path, 'rb') as file:
+        salt = file.read(16)  # Read the salt
+        cari_apa_bang = file.read(16)  # Read the Initialization Vector
+        ciphertext = file.read()
+
     # Derive key from password
-    salt = b'salt123'  # You should use a unique salt
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
@@ -48,13 +54,8 @@ def decrypt_file(password, encrypted_file_path, decrypted_file_path):
     )
     key = kdf.derive(password.encode())
 
-    # Read the encrypted file
-    with open(encrypted_file_path, 'rb') as file:
-        iv = file.read(16)  # Initialization Vector
-        ciphertext = file.read()
-
     # Create a cipher object and decrypt the data
-    cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
+    cipher = Cipher(algorithms.AES(key), modes.CFB(cari_apa_bang), backend=default_backend())
     decryptor = cipher.decryptor()
     decrypted_data = decryptor.update(ciphertext) + decryptor.finalize()
 
