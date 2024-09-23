@@ -5,9 +5,9 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from colorama import Fore, Style, init
 
-def encrypt_file(password, plain_file_path, encrypted_file_path):
-    # Derive key from password
-    salt = os.urandom(16)  # Use a unique salt
+CHUNK_SIZE = 64 * 1024  # Process files in 64 KB chunks
+
+def derive_key(password, salt):
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
@@ -15,54 +15,53 @@ def encrypt_file(password, plain_file_path, encrypted_file_path):
         iterations=100000,
         backend=default_backend()
     )
-    key = kdf.derive(password.encode())
+    return kdf.derive(password.encode())
 
-    # Generate Initialization Vector
-    cari_apa_bang = os.urandom(16)
+def encrypt_file(password, plain_file_path, encrypted_file_path):
+    try:
+        # Derive key from password
+        salt = os.urandom(16)
+        key = derive_key(password, salt)
 
-    # Create a cipher object and encrypt the data
-    cipher = Cipher(algorithms.AES(key), modes.CFB(cari_apa_bang), backend=default_backend())
-    encryptor = cipher.encryptor()
-    
-    # Read the plaintext file
-    with open(plain_file_path, 'rb') as file:
-        plaintext = file.read()
+        # Generate Initialization Vector
+        iv = os.urandom(16)
 
-    # Encrypt the data
-    ciphertext = encryptor.update(plaintext) + encryptor.finalize()
+        # Create a cipher object and encrypt the data
+        cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
+        encryptor = cipher.encryptor()
 
-    # Write the salt, Initialization Vector, and encrypted data to a new file
-    with open(encrypted_file_path, 'wb') as file:
-        file.write(salt)
-        file.write(cari_apa_bang)
-        file.write(ciphertext)
+        with open(plain_file_path, 'rb') as infile, open(encrypted_file_path, 'wb') as outfile:
+            outfile.write(salt)  # Save salt
+            outfile.write(iv)    # Save IV
+            
+            while chunk := infile.read(CHUNK_SIZE):
+                outfile.write(encryptor.update(chunk))
+            outfile.write(encryptor.finalize())
+        print(f"{Fore.GREEN}File encrypted successfully.{Style.RESET_ALL}")
+
+    except Exception as e:
+        print(f"{Fore.RED}Error during encryption: {str(e)}{Style.RESET_ALL}")
 
 def decrypt_file(password, encrypted_file_path, decrypted_file_path):
-    # Read the encrypted file
-    with open(encrypted_file_path, 'rb') as file:
-        salt = file.read(16)  # Read the salt
-        cari_apa_bang = file.read(16)  # Read the Initialization Vector
-        ciphertext = file.read()
+    try:
+        with open(encrypted_file_path, 'rb') as infile:
+            salt = infile.read(16)
+            iv = infile.read(16)
+            key = derive_key(password, salt)
 
-    # Derive key from password
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=salt,
-        iterations=100000,
-        backend=default_backend()
-    )
-    key = kdf.derive(password.encode())
+            cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
+            decryptor = cipher.decryptor()
 
-    # Create a cipher object and decrypt the data
-    cipher = Cipher(algorithms.AES(key), modes.CFB(cari_apa_bang), backend=default_backend())
-    decryptor = cipher.decryptor()
-    decrypted_data = decryptor.update(ciphertext) + decryptor.finalize()
+            with open(decrypted_file_path, 'wb') as outfile:
+                while chunk := infile.read(CHUNK_SIZE):
+                    outfile.write(decryptor.update(chunk))
+                outfile.write(decryptor.finalize())
+        print(f"{Fore.GREEN}File decrypted successfully.{Style.RESET_ALL}")
 
-    # Write the decrypted data to a new file
-    with open(decrypted_file_path, 'wb') as file:
-        file.write(decrypted_data)
+    except Exception as e:
+        print(f"{Fore.RED}Error during decryption: {str(e)}{Style.RESET_ALL}")
 
+# Folder encryption/decryption functions remain the same, except now they call the updated encrypt_file/decrypt_file
 def encrypt_folder(password, plain_folder_path, encrypted_folder_path):
     for root, _, files in os.walk(plain_folder_path):
         for file in files:
@@ -92,10 +91,9 @@ def print_menu():
     print(f"5. Exit{Style.RESET_ALL}")
 
 def main():
-    init(autoreset=True)  # Initialize colorama
+    init(autoreset=True)
     while True:
         print_menu()
-
         choice = input(f"{Fore.CYAN}Enter your choice (1/2/3/4/5): {Style.RESET_ALL}")
 
         if choice == "1":
@@ -103,28 +101,24 @@ def main():
             plain_file_path = input(f"{Fore.CYAN}Enter the path to the plaintext file: {Style.RESET_ALL}")
             encrypted_file_path = input(f"{Fore.CYAN}Enter the path to save the encrypted file: {Style.RESET_ALL}")
             encrypt_file(password, plain_file_path, encrypted_file_path)
-            print(f"{Fore.GREEN}File encrypted successfully.{Style.RESET_ALL}")
 
         elif choice == "2":
             password = input(f"{Fore.CYAN}Enter password: {Style.RESET_ALL}")
             encrypted_file_path = input(f"{Fore.CYAN}Enter the path to the encrypted file: {Style.RESET_ALL}")
             decrypted_file_path = input(f"{Fore.CYAN}Enter the path to save the decrypted file: {Style.RESET_ALL}")
             decrypt_file(password, encrypted_file_path, decrypted_file_path)
-            print(f"{Fore.GREEN}File decrypted successfully.{Style.RESET_ALL}")
 
         elif choice == "3":
             password = input(f"{Fore.CYAN}Enter password: {Style.RESET_ALL}")
             plain_folder_path = input(f"{Fore.CYAN}Enter the path to the plaintext folder: {Style.RESET_ALL}")
             encrypted_folder_path = input(f"{Fore.CYAN}Enter the path to save the encrypted folder: {Style.RESET_ALL}")
             encrypt_folder(password, plain_folder_path, encrypted_folder_path)
-            print(f"{Fore.GREEN}Folder encrypted successfully.{Style.RESET_ALL}")
 
         elif choice == "4":
             password = input(f"{Fore.CYAN}Enter password: {Style.RESET_ALL}")
             encrypted_folder_path = input(f"{Fore.CYAN}Enter the path to the encrypted folder: {Style.RESET_ALL}")
             decrypted_folder_path = input(f"{Fore.CYAN}Enter the path to save the decrypted folder: {Style.RESET_ALL}")
             decrypt_folder(password, encrypted_folder_path, decrypted_folder_path)
-            print(f"{Fore.GREEN}Folder decrypted successfully.{Style.RESET_ALL}")
 
         elif choice == "5":
             print(f"{Fore.CYAN}Exiting the program.{Style.RESET_ALL}")
